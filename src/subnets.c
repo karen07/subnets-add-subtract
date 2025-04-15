@@ -177,11 +177,11 @@ int32_t main(int32_t argc, char *argv[])
     char *ips = NULL;
     //Alloc ips
     {
-        ips = (char *)malloc(UINT32_MAX * sizeof(char));
+        ips = (char *)malloc((UINT32_MAX + 1UL) * sizeof(char));
         if (ips == NULL) {
             errmsg("Not free memory for ips\n");
         }
-        memset(ips, 0, UINT32_MAX * sizeof(char));
+        memset(ips, 0, (UINT32_MAX + 1UL) * sizeof(char));
     }
     //Alloc ips
 
@@ -207,17 +207,10 @@ int32_t main(int32_t argc, char *argv[])
                     *slash_ptr = 0;
                     if (strlen(tmp_line) < INET_ADDRSTRLEN) {
                         uint32_t ip = ntohl(inet_addr(tmp_line));
-                        uint32_t mask = 1;
-                        uint32_t subnet_size = 1;
-                        if (tmp_prefix != 0) {
-                            subnet_size <<= 32 - tmp_prefix;
-                            mask = (0xFFFFFFFF << (32 - tmp_prefix)) & 0xFFFFFFFF;
-                        } else {
-                            subnet_size = UINT32_MAX;
-                            mask = 0;
-                        }
+                        uint64_t subnet_size = 1UL << (32 - tmp_prefix);
+                        uint32_t mask = 0xFFFFFFFFFFFFFFFF << (32 - tmp_prefix);
                         ip &= mask;
-                        for (uint32_t i = 0; i < subnet_size; i++) {
+                        for (uint64_t i = 0; i < subnet_size; i++) {
                             ips[ip] = 1;
                             ip++;
                         }
@@ -255,17 +248,10 @@ int32_t main(int32_t argc, char *argv[])
                     *slash_ptr = 0;
                     if (strlen(tmp_line) < INET_ADDRSTRLEN) {
                         uint32_t ip = ntohl(inet_addr(tmp_line));
-                        uint32_t mask = 1;
-                        uint32_t subnet_size = 1;
-                        if (tmp_prefix != 0) {
-                            subnet_size <<= 32 - tmp_prefix;
-                            mask = (0xFFFFFFFF << (32 - tmp_prefix)) & 0xFFFFFFFF;
-                        } else {
-                            subnet_size = UINT32_MAX;
-                            mask = 0;
-                        }
+                        uint64_t subnet_size = 1UL << (32 - tmp_prefix);
+                        uint32_t mask = 0xFFFFFFFFFFFFFFFF << (32 - tmp_prefix);
                         ip &= mask;
-                        for (uint32_t i = 0; i < subnet_size; i++) {
+                        for (uint64_t i = 0; i < subnet_size; i++) {
                             if (ips[ip] == 0) {
                                 printf("Incorrect intersection of subnets %s/%u\n", tmp_line,
                                        tmp_prefix);
@@ -296,7 +282,10 @@ int32_t main(int32_t argc, char *argv[])
 
         uint32_t res_count = 0;
 
-        for (uint32_t i = 0; i < UINT32_MAX; i++) {
+        for (uint64_t i = 0; i < (1UL << 32); i++) {
+            if (i % ((1UL << 32) / 100) == 0) {
+                printf("%lu%%\n", i / ((1UL << 32) / 100));
+            }
             if (ips[i] == 1) {
                 save_one_addr(i);
                 res_count++;

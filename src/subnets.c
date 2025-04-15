@@ -44,6 +44,7 @@ static void free_tree(NODE *n)
     free(n);
 }
 
+//Add node
 static void add_to_node(NODE **np, unsigned long int a, int bit, int end)
 {
     NODE *n;
@@ -71,6 +72,13 @@ static void add_to_node(NODE **np, unsigned long int a, int bit, int end)
     }
 }
 
+static void save_one_addr(unsigned long int a)
+{
+    add_to_node(&root, a, 31, -1);
+}
+//Add node
+
+//Dump
 static void dump_tree(NODE *n, unsigned long int v, int bit)
 {
     if (n == NONE) {
@@ -88,15 +96,11 @@ static void dump_tree(NODE *n, unsigned long int v, int bit)
     dump_tree(n->sub[1], v | (1 << bit), bit - 1);
 }
 
-static void save_one_addr(unsigned long int a)
-{
-    add_to_node(&root, a, 31, -1);
-}
-
 static void dump_output(void)
 {
     dump_tree(root, 0, 31);
 }
+//Dump
 
 void print_help(void)
 {

@@ -8,7 +8,7 @@
 #include <arpa/inet.h>
 #include <linux/limits.h>
 
-#define THREAD_COUNT 8
+#define THREAD_COUNT 64
 
 typedef struct node NODE;
 struct node {
@@ -36,6 +36,8 @@ static NODE all_g[THREAD_COUNT];
 static FILE *res_fd_g[THREAD_COUNT];
 
 static char *ips = NULL;
+
+static int32_t thread_count = 0;
 
 static pthread_barrier_t threads_barrier_start;
 static pthread_barrier_t threads_barrier_end;
@@ -113,8 +115,9 @@ static void print_help(void)
 {
     printf("Commands:\n"
            "  Required parameters:\n"
-           "    +  \"/test.txt\"  Path to the subnets to add\n"
-           "    -  \"/test.txt\"  Path to the subnets to subtract\n");
+           "    -t  \"x\"          Thread count\n"
+           "    -a  \"/test.txt\"  Path to the subnets to add\n"
+           "    -s  \"/test.txt\"  Path to the subnets to subtract\n");
 }
 
 static void main_catch_function(int32_t signo)
@@ -137,16 +140,16 @@ void *process_thread_func(void *arg)
 
     uint32_t res_count = 0;
 
-    printf("Start %d %lu-%lu\n", thread_id, ((1UL << 32) / THREAD_COUNT) * thread_id,
-           ((1UL << 32) / THREAD_COUNT) * (thread_id + 1));
+    printf("Start %d %lu-%lu\n", thread_id, ((1UL << 32) / thread_count) * thread_id,
+           ((1UL << 32) / thread_count) * (thread_id + 1));
     fflush(stdout);
 
     pthread_barrier_wait(&threads_barrier_start);
 
-    for (uint64_t i = ((1UL << 32) / THREAD_COUNT) * thread_id;
-         i < ((1UL << 32) / THREAD_COUNT) * (thread_id + 1); i++) {
-        uint64_t offset_i = (i - ((1UL << 32) / THREAD_COUNT) * thread_id);
-        uint64_t part = ((1UL << 32) / THREAD_COUNT / 100);
+    for (uint64_t i = ((1UL << 32) / thread_count) * thread_id;
+         i < ((1UL << 32) / thread_count) * (thread_id + 1); i++) {
+        uint64_t offset_i = (i - ((1UL << 32) / thread_count) * thread_id);
+        uint64_t part = ((1UL << 32) / thread_count / 100);
         if (offset_i % part == 0) {
             printf("%d %lu%%\n", thread_id, offset_i / part);
         }
@@ -190,7 +193,7 @@ int32_t main(int32_t argc, char *argv[])
     {
         printf("Launch parameters:\n");
         for (int32_t i = 1; i < argc; i++) {
-            if (!strcmp(argv[i], "+")) {
+            if (!strcmp(argv[i], "-a")) {
                 if (i != argc - 1) {
                     printf("  Path to the subnets to add  \"%s\"\n", argv[i + 1]);
                     if (strlen(argv[i + 1]) < PATH_MAX - 100) {
@@ -200,12 +203,20 @@ int32_t main(int32_t argc, char *argv[])
                 }
                 continue;
             }
-            if (!strcmp(argv[i], "-")) {
+            if (!strcmp(argv[i], "-s")) {
                 if (i != argc - 1) {
                     printf("  Path to the subnets to subtract  \"%s\"\n", argv[i + 1]);
                     if (strlen(argv[i + 1]) < PATH_MAX - 100) {
                         strcpy(sub_subnets_path, argv[i + 1]);
                     }
+                    i++;
+                }
+                continue;
+            }
+            if (!strcmp(argv[i], "-t")) {
+                if (i != argc - 1) {
+                    printf("  Thread count  \"%s\"\n", argv[i + 1]);
+                    sscanf(argv[i + 1], "%d", &thread_count);
                     i++;
                 }
                 continue;
@@ -217,6 +228,11 @@ int32_t main(int32_t argc, char *argv[])
         if (add_subnets_path[0] == 0) {
             print_help();
             errmsg("Programm need path to the subnets to add\n");
+        }
+
+        if ((thread_count & (thread_count - 1)) != 0) {
+            print_help();
+            errmsg("Programm need thread_count pow of 2\n");
         }
     }
     //Args
@@ -317,12 +333,12 @@ int32_t main(int32_t argc, char *argv[])
     }
     //Subtract subnets
 
-    pthread_barrier_init(&threads_barrier_start, NULL, THREAD_COUNT + 1);
-    pthread_barrier_init(&threads_barrier_end, NULL, THREAD_COUNT + 1);
+    pthread_barrier_init(&threads_barrier_start, NULL, thread_count + 1);
+    pthread_barrier_init(&threads_barrier_end, NULL, thread_count + 1);
 
     //Calc result
     {
-        for (int32_t i = 0; i < THREAD_COUNT; i++) {
+        for (int32_t i = 0; i < thread_count; i++) {
             pthread_t thread;
             void *set_arg;
             set_arg = (void *)((int64_t)i);
@@ -343,7 +359,7 @@ int32_t main(int32_t argc, char *argv[])
 
     //Dump result
     {
-        for (int32_t i = 0; i < THREAD_COUNT; i++) {
+        for (int32_t i = 0; i < thread_count; i++) {
             char tmp_file_name[PATH_MAX];
             sprintf(tmp_file_name, "result_%d.txt", i);
 
@@ -353,7 +369,7 @@ int32_t main(int32_t argc, char *argv[])
             }
         }
 
-        for (int32_t i = 0; i < THREAD_COUNT; i++) {
+        for (int32_t i = 0; i < thread_count; i++) {
             dump_output(i);
         }
     }

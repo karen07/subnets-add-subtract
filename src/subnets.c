@@ -8,7 +8,7 @@
 #include <arpa/inet.h>
 #include <linux/limits.h>
 
-#define THREAD_COUNT 1
+#define THREAD_COUNT 8
 
 void errmsg(const char *format, ...)
 {
@@ -138,8 +138,10 @@ void *process_thread_func(void *arg)
 
     for (uint64_t i = ((1UL << 32) / THREAD_COUNT) * thread_id;
          i < ((1UL << 32) / THREAD_COUNT) * (thread_id + 1); i++) {
-        if (i % ((1UL << 32) / THREAD_COUNT / 100) == 0) {
-            printf("%d %lu%%\n", thread_id, i / ((1UL << 32) / THREAD_COUNT / 100));
+        uint64_t offset_i = (i - ((1UL << 32) / THREAD_COUNT) * thread_id);
+        uint64_t part = ((1UL << 32) / THREAD_COUNT / 100);
+        if (offset_i % part == 0) {
+            printf("%d %lu%%\n", thread_id, offset_i / part);
         }
         if (ips[i] == 1) {
             save_one_addr(thread_id, i);

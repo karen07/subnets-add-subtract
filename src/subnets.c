@@ -59,8 +59,9 @@ static void add_to_node(NODE **np, NODE *none, NODE *all, unsigned long int a, i
         return;
     }
     if (bit <= end) {
-        if (n != none)
+        if (n != none) {
             free_tree(n, none, all);
+        }
         *np = all;
         return;
     }

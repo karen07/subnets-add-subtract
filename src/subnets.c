@@ -37,7 +37,8 @@ FILE *res_fd[THREAD_COUNT];
 
 char *ips = NULL;
 
-pthread_barrier_t threads_barrier;
+pthread_barrier_t threads_barrier_start;
+pthread_barrier_t threads_barrier_end;
 
 //Add node
 static void free_tree(NODE *n, NODE *none, NODE *all)
@@ -134,8 +135,13 @@ void *process_thread_func(void *arg)
 
     root[thread_id] = &none[thread_id];
 
+    int32_t res_count = 0;
+
     printf("Start %d %lu-%lu\n", thread_id, ((1UL << 32) / THREAD_COUNT) * thread_id,
            ((1UL << 32) / THREAD_COUNT) * (thread_id + 1));
+    fflush(stdout);
+
+    pthread_barrier_wait(&threads_barrier_start);
 
     for (uint64_t i = ((1UL << 32) / THREAD_COUNT) * thread_id;
          i < ((1UL << 32) / THREAD_COUNT) * (thread_id + 1); i++) {
@@ -146,12 +152,14 @@ void *process_thread_func(void *arg)
         }
         if (ips[i] == 1) {
             save_one_addr(thread_id, i);
+            res_count++;
         }
     }
 
-    pthread_barrier_wait(&threads_barrier);
+    pthread_barrier_wait(&threads_barrier_end);
 
-    printf("End %d\n", thread_id);
+    printf("End %d %d\n", thread_id, res_count);
+    fflush(stdout);
 
     return NULL;
 }
@@ -309,7 +317,8 @@ int32_t main(int32_t argc, char *argv[])
     }
     //Subtract subnets
 
-    pthread_barrier_init(&threads_barrier, NULL, THREAD_COUNT + 1);
+    pthread_barrier_init(&threads_barrier_start, NULL, THREAD_COUNT + 1);
+    pthread_barrier_init(&threads_barrier_end, NULL, THREAD_COUNT + 1);
 
     //Calc result
     {
@@ -327,8 +336,8 @@ int32_t main(int32_t argc, char *argv[])
     }
     //Calc result
 
-    pthread_barrier_wait(&threads_barrier);
-    fflush(stdout);
+    pthread_barrier_wait(&threads_barrier_start);
+    pthread_barrier_wait(&threads_barrier_end);
 
     //Dump result
     {

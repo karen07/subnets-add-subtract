@@ -4,6 +4,8 @@
 #include <string.h>
 #include <stdarg.h>
 #include <signal.h>
+#include <unistd.h>
+#include <limits.h>
 #include <pthread.h>
 #include <arpa/inet.h>
 #include <linux/limits.h>
@@ -158,7 +160,7 @@ void *process_thread_func(void *arg)
         if (offset_i % part == 0) {
             printf("%d %lu%%\n", thread_id, offset_i / part);
         }
-        if (ips[i] == 1) {
+        if ((ips[i / CHAR_BIT] & ((char)1 << i % CHAR_BIT)) != 0) {
             save_one_addr(thread_id, i);
             res_count++;
         }
@@ -249,11 +251,11 @@ int32_t main(int32_t argc, char *argv[])
 
     //Alloc ips
     {
-        ips = (char *)malloc((UINT32_MAX + 1UL) * sizeof(char));
+        ips = (char *)malloc((UINT32_MAX + 1UL) * sizeof(char) / CHAR_BIT);
         if (ips == NULL) {
             errmsg("Not free memory for ips\n");
         }
-        memset(ips, 0, (UINT32_MAX + 1UL) * sizeof(char));
+        memset(ips, 0, (UINT32_MAX + 1UL) * sizeof(char) / CHAR_BIT);
     }
     //Alloc ips
 
@@ -283,7 +285,7 @@ int32_t main(int32_t argc, char *argv[])
                         uint32_t mask = 0xFFFFFFFFFFFFFFFF << (32 - tmp_prefix);
                         ip &= mask;
                         for (uint64_t i = 0; i < subnet_size; i++) {
-                            ips[ip] = 1;
+                            ips[ip / CHAR_BIT] |= (char)1 << ip % CHAR_BIT;
                             ip++;
                         }
                     }
@@ -326,11 +328,11 @@ int32_t main(int32_t argc, char *argv[])
                         uint32_t mask = 0xFFFFFFFFFFFFFFFF << (32 - tmp_prefix);
                         ip &= mask;
                         for (uint64_t i = 0; i < subnet_size; i++) {
-                            if (ips[ip] == 0) {
+                            if ((ips[ip / CHAR_BIT] & ((char)1 << ip % CHAR_BIT)) == 0) {
                                 printf("Incorrect intersection of subnets %s/%u\n", tmp_line,
                                        tmp_prefix);
                             }
-                            ips[ip] = 0;
+                            ips[ip / CHAR_BIT] &= ~((char)1 << ip % CHAR_BIT);
                             ip++;
                         }
                     }

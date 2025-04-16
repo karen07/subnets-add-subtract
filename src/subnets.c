@@ -33,7 +33,6 @@ void errmsg(const char *format, ...)
 static NODE *root_g[THREAD_COUNT];
 static NODE none_g[THREAD_COUNT];
 static NODE all_g[THREAD_COUNT];
-static FILE *res_fd_g[THREAD_COUNT];
 
 static char *ips = NULL;
 
@@ -105,9 +104,9 @@ static void dump_tree(NODE *n, NODE *none, NODE *all, FILE *res_fd, unsigned lon
     dump_tree(n->sub[1], none, all, res_fd, v | (1 << bit), bit - 1);
 }
 
-static void dump_output(int32_t thread_id)
+static void dump_output(int32_t thread_id, FILE *res_fd_g)
 {
-    dump_tree(root_g[thread_id], &none_g[thread_id], &all_g[thread_id], res_fd_g[thread_id], 0, 31);
+    dump_tree(root_g[thread_id], &none_g[thread_id], &all_g[thread_id], res_fd_g, 0, 31);
 }
 //Dump
 
@@ -228,6 +227,11 @@ int32_t main(int32_t argc, char *argv[])
         if (add_subnets_path[0] == 0) {
             print_help();
             errmsg("Programm need path to the subnets to add\n");
+        }
+
+        if (thread_count == 0 || thread_count > THREAD_COUNT) {
+            print_help();
+            errmsg("Programm need thread_count form 1 to %d\n", THREAD_COUNT);
         }
 
         if ((thread_count & (thread_count - 1)) != 0) {
@@ -359,18 +363,14 @@ int32_t main(int32_t argc, char *argv[])
 
     //Dump result
     {
-        for (int32_t i = 0; i < thread_count; i++) {
-            char tmp_file_name[PATH_MAX];
-            sprintf(tmp_file_name, "result_%d.txt", i);
-
-            res_fd_g[i] = fopen(tmp_file_name, "w");
-            if (res_fd_g[i] == NULL) {
-                errmsg("Can't open %s file\n", tmp_file_name);
-            }
+        FILE *res_fd_g;
+        res_fd_g = fopen("result.txt", "w");
+        if (res_fd_g == NULL) {
+            errmsg("Can't open result.txt file\n");
         }
 
         for (int32_t i = 0; i < thread_count; i++) {
-            dump_output(i);
+            dump_output(i, res_fd_g);
         }
     }
     //Dump result

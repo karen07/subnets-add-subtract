@@ -10,6 +10,11 @@
 
 #define THREAD_COUNT 8
 
+typedef struct node NODE;
+struct node {
+    NODE *sub[2];
+};
+
 void errmsg(const char *format, ...)
 {
     va_list args;
@@ -25,20 +30,15 @@ void errmsg(const char *format, ...)
     exit(EXIT_FAILURE);
 }
 
-typedef struct node NODE;
-struct node {
-    NODE *sub[2];
-};
+static NODE *root_g[THREAD_COUNT];
+static NODE none_g[THREAD_COUNT];
+static NODE all_g[THREAD_COUNT];
+static FILE *res_fd_g[THREAD_COUNT];
 
-static NODE *root[THREAD_COUNT];
-static NODE none[THREAD_COUNT];
-static NODE all[THREAD_COUNT];
-FILE *res_fd[THREAD_COUNT];
+static char *ips = NULL;
 
-char *ips = NULL;
-
-pthread_barrier_t threads_barrier_start;
-pthread_barrier_t threads_barrier_end;
+static pthread_barrier_t threads_barrier_start;
+static pthread_barrier_t threads_barrier_end;
 
 //Add node
 static void free_tree(NODE *n, NODE *none, NODE *all)
@@ -81,35 +81,35 @@ static void add_to_node(NODE **np, NODE *none, NODE *all, unsigned long int a, i
 
 static void save_one_addr(int32_t thread_id, unsigned long int add)
 {
-    add_to_node(&root[thread_id], &none[thread_id], &all[thread_id], add, 31, -1);
+    add_to_node(&root_g[thread_id], &none_g[thread_id], &all_g[thread_id], add, 31, -1);
 }
 //Add node
 
 //Dump
-static void dump_tree(NODE *n, NODE *none, NODE *all, FILE *res_fd_l, unsigned long int v, int bit)
+static void dump_tree(NODE *n, NODE *none, NODE *all, FILE *res_fd, unsigned long int v, int bit)
 {
     if (n == none) {
         return;
     }
     if (n == all) {
-        fprintf(res_fd_l, "%lu.%lu.%lu.%lu/%d\n", v >> 24 & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff,
+        fprintf(res_fd, "%lu.%lu.%lu.%lu/%d\n", v >> 24 & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff,
                 v & 0xff, 31 - bit);
         return;
     }
     if (bit < 0) {
         abort();
     }
-    dump_tree(n->sub[0], none, all, res_fd_l, v, bit - 1);
-    dump_tree(n->sub[1], none, all, res_fd_l, v | (1 << bit), bit - 1);
+    dump_tree(n->sub[0], none, all, res_fd, v, bit - 1);
+    dump_tree(n->sub[1], none, all, res_fd, v | (1 << bit), bit - 1);
 }
 
 static void dump_output(int32_t thread_id)
 {
-    dump_tree(root[thread_id], &none[thread_id], &all[thread_id], res_fd[thread_id], 0, 31);
+    dump_tree(root_g[thread_id], &none_g[thread_id], &all_g[thread_id], res_fd_g[thread_id], 0, 31);
 }
 //Dump
 
-void print_help(void)
+static void print_help(void)
 {
     printf("Commands:\n"
            "  Required parameters:\n"
@@ -133,7 +133,7 @@ void *process_thread_func(void *arg)
     int32_t thread_id;
     thread_id = (int64_t)arg;
 
-    root[thread_id] = &none[thread_id];
+    root_g[thread_id] = &none_g[thread_id];
 
     int32_t res_count = 0;
 
@@ -345,11 +345,13 @@ int32_t main(int32_t argc, char *argv[])
             char tmp_file_name[PATH_MAX];
             sprintf(tmp_file_name, "result_%d.txt", i);
 
-            res_fd[i] = fopen(tmp_file_name, "w");
-            if (res_fd[i] == NULL) {
+            res_fd_g[i] = fopen(tmp_file_name, "w");
+            if (res_fd_g[i] == NULL) {
                 errmsg("Can't open %s file\n", tmp_file_name);
             }
+        }
 
+        for (int32_t i = 0; i < THREAD_COUNT; i++) {
             dump_output(i);
         }
     }

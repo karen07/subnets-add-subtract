@@ -4,8 +4,11 @@
 #include <string.h>
 #include <stdarg.h>
 #include <signal.h>
+#include <pthread.h>
 #include <arpa/inet.h>
 #include <linux/limits.h>
+
+#define THREAD_COUNT 8
 
 void errmsg(const char *format, ...)
 {
@@ -26,79 +29,81 @@ typedef struct node NODE;
 struct node {
     NODE *sub[2];
 };
-static NODE *root;
-static NODE none;
-#define NONE (&none)
-static NODE all;
-#define ALL (&all)
 
-FILE *res_fd;
+static NODE *root[THREAD_COUNT];
+static NODE none[THREAD_COUNT];
+static NODE all[THREAD_COUNT];
+FILE *res_fd[THREAD_COUNT];
 
-static void free_tree(NODE *n)
+char *ips = NULL;
+
+pthread_barrier_t threads_barrier;
+
+//Add node
+static void free_tree(NODE *n, NODE *none, NODE *all)
 {
-    if ((n == NONE) || (n == ALL)) {
+    if ((n == none) || (n == all)) {
         return;
     }
-    free_tree(n->sub[0]);
-    free_tree(n->sub[1]);
+    free_tree(n->sub[0], none, all);
+    free_tree(n->sub[1], none, all);
     free(n);
 }
 
-//Add node
-static void add_to_node(NODE **np, unsigned long int a, int bit, int end)
+static void add_to_node(NODE **np, NODE *none, NODE *all, unsigned long int a, int bit, int end)
 {
     NODE *n;
 
     n = *np;
-    if (n == ALL) {
+    if (n == all) {
         return;
     }
     if (bit <= end) {
-        if (n != NONE)
-            free_tree(n);
-        *np = ALL;
+        if (n != none)
+            free_tree(n, none, all);
+        *np = all;
         return;
     }
-    if (n == NONE) {
+    if (n == none) {
         n = malloc(sizeof(NODE));
-        n->sub[0] = NONE;
-        n->sub[1] = NONE;
+        n->sub[0] = none;
+        n->sub[1] = none;
         *np = n;
     }
-    add_to_node(&n->sub[(a >> bit) & 1], a, bit - 1, end);
-    if ((n->sub[0] == ALL) && (n->sub[1] == ALL)) {
+    add_to_node(&n->sub[(a >> bit) & 1], none, all, a, bit - 1, end);
+    if ((n->sub[0] == all) && (n->sub[1] == all)) {
         free(n);
-        *np = ALL;
+        *np = all;
     }
 }
 
-static void save_one_addr(unsigned long int a)
+static void save_one_addr(int32_t thread_id, unsigned long int add)
 {
-    add_to_node(&root, a, 31, -1);
+    add_to_node(&root[thread_id], &none[thread_id], &all[thread_id], add, 31, -1);
 }
 //Add node
 
 //Dump
-static void dump_tree(NODE *n, unsigned long int v, int bit)
+static void dump_tree(NODE *n, NODE *none, NODE *all, FILE *res_fd_l, unsigned long int v, int bit)
 {
-    if (n == NONE) {
+    if (n == none) {
         return;
     }
-    if (n == ALL) {
-        fprintf(res_fd, "%lu.%lu.%lu.%lu/%d\n", v >> 24 & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff,
+    if (n == all) {
+        fprintf(res_fd_l, "%lu.%lu.%lu.%lu/%d\n", v >> 24 & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff,
                 v & 0xff, 31 - bit);
         return;
     }
     if (bit < 0) {
         abort();
     }
-    dump_tree(n->sub[0], v, bit - 1);
-    dump_tree(n->sub[1], v | (1 << bit), bit - 1);
+    dump_tree(n->sub[0], none, all, res_fd_l, v, bit - 1);
+    dump_tree(n->sub[1], none, all, res_fd_l, v | (1 << bit), bit - 1);
 }
 
-static void dump_output(void)
+static void dump_output(int32_t thread_id)
 {
-    dump_tree(root, 0, 31);
+    dump_tree(root[thread_id], &none[thread_id], &all[thread_id], res_fd[thread_id], 0, 31);
 }
 //Dump
 
@@ -119,6 +124,33 @@ static void main_catch_function(int32_t signo)
     } else if (signo == SIGTERM) {
         errmsg("SIGTERM catched main\n");
     }
+}
+
+void *process_thread_func(void *arg)
+{
+    int32_t thread_id;
+    thread_id = (int64_t)arg;
+
+    root[thread_id] = &none[thread_id];
+
+    printf("Start %d %lu-%lu\n", thread_id, ((1UL << 32) / THREAD_COUNT) * thread_id,
+           ((1UL << 32) / THREAD_COUNT) * (thread_id + 1));
+
+    for (uint64_t i = ((1UL << 32) / THREAD_COUNT) * thread_id;
+         i < ((1UL << 32) / THREAD_COUNT) * (thread_id + 1); i++) {
+        //if (i % ((1UL << 32) / 100) == 0) {
+        //    printf("%lu%%\n", i / ((1UL << 32) / 100));
+        //}
+        if (ips[i] == 1) {
+            save_one_addr(thread_id, i);
+        }
+    }
+
+    pthread_barrier_wait(&threads_barrier);
+
+    printf("End %d\n", thread_id);
+
+    return NULL;
 }
 
 int32_t main(int32_t argc, char *argv[])
@@ -178,7 +210,6 @@ int32_t main(int32_t argc, char *argv[])
     }
     //Args
 
-    char *ips = NULL;
     //Alloc ips
     {
         ips = (char *)malloc((UINT32_MAX + 1UL) * sizeof(char));
@@ -230,7 +261,7 @@ int32_t main(int32_t argc, char *argv[])
     }
     //Add subnets
 
-    //Sub subnets
+    //Subtract subnets
     {
         if (sub_subnets_path[0] != 0) {
             FILE *sub_subnets_fd;
@@ -273,34 +304,44 @@ int32_t main(int32_t argc, char *argv[])
             printf("Subtract subnets count %d\n", in_subnet_count);
         }
     }
-    //Sub subnets
+    //Subtract subnets
 
-    root = NONE;
+    pthread_barrier_init(&threads_barrier, NULL, THREAD_COUNT + 1);
 
     //Calc result
     {
-        res_fd = fopen("result.txt", "w");
-        if (res_fd == NULL) {
-            errmsg("Can't open result file\n");
-        }
-
-        uint32_t res_count = 0;
-
-        for (uint64_t i = 0; i < (1UL << 32); i++) {
-            if (i % ((1UL << 32) / 100) == 0) {
-                printf("%lu%%\n", i / ((1UL << 32) / 100));
+        for (int32_t i = 0; i < THREAD_COUNT; i++) {
+            pthread_t thread;
+            void *set_arg;
+            set_arg = (void *)((int64_t)i);
+            if (pthread_create(&thread, NULL, process_thread_func, set_arg)) {
+                errmsg("Can't create process_thread %d\n", i);
             }
-            if (ips[i] == 1) {
-                save_one_addr(i);
-                res_count++;
+            if (pthread_detach(thread)) {
+                errmsg("Can't detach process_thread %d\n", i);
             }
         }
-
-        printf("Result subnets count %u\n", res_count);
     }
     //Calc result
 
-    dump_output();
+    pthread_barrier_wait(&threads_barrier);
+    fflush(stdout);
+
+    //Dump result
+    {
+        for (int32_t i = 0; i < THREAD_COUNT; i++) {
+            char tmp_file_name[PATH_MAX];
+            sprintf(tmp_file_name, "result_%d.txt", i);
+
+            res_fd[i] = fopen(tmp_file_name, "w");
+            if (res_fd[i] == NULL) {
+                errmsg("Can't open %s file\n", tmp_file_name);
+            }
+
+            dump_output(i);
+        }
+    }
+    //Dump result
 
     return EXIT_SUCCESS;
 }

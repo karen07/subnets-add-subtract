@@ -30,9 +30,9 @@ void errmsg(const char *format, ...)
     exit(EXIT_FAILURE);
 }
 
-static NODE *root_g[THREAD_COUNT];
-static NODE none_g[THREAD_COUNT];
-static NODE all_g[THREAD_COUNT];
+static NODE *root_g[THREAD_COUNT + 1];
+static NODE none_g[THREAD_COUNT + 1];
+static NODE all_g[THREAD_COUNT + 1];
 
 static char *ips = NULL;
 
@@ -83,6 +83,12 @@ static void add_to_node(NODE **np, NODE *none, NODE *all, unsigned long int a, i
 static void save_one_addr(int32_t thread_id, unsigned long int add)
 {
     add_to_node(&root_g[thread_id], &none_g[thread_id], &all_g[thread_id], add, 31, -1);
+}
+
+static void save_cidr(int32_t thread_id, unsigned long int add, int pref)
+{
+    add_to_node(&root_g[thread_id], &none_g[thread_id], &all_g[thread_id],
+                pref ? add & 0xffffffff & (0xffffffff << (32 - pref)) : 0, 31, 31 - pref);
 }
 //Add node
 
@@ -287,6 +293,8 @@ int32_t main(int32_t argc, char *argv[])
                 }
             }
 
+            fclose(add_subnets_fd);
+
             printf("Add subnets count %d\n", in_subnet_count);
         }
     }
@@ -332,6 +340,8 @@ int32_t main(int32_t argc, char *argv[])
                 }
             }
 
+            fclose(sub_subnets_fd);
+
             printf("Subtract subnets count %d\n", in_subnet_count);
         }
     }
@@ -372,8 +382,58 @@ int32_t main(int32_t argc, char *argv[])
         for (int32_t i = 0; i < thread_count; i++) {
             dump_output(i, res_fd_g);
         }
+
+        fclose(res_fd_g);
     }
     //Dump result
+
+    //Final result
+    {
+        char tmp_line[100];
+
+        root_g[THREAD_COUNT] = &none_g[THREAD_COUNT];
+
+        int32_t in_subnet_count = 0;
+
+        FILE *res_fd_g;
+        res_fd_g = fopen("result.txt", "r");
+        if (res_fd_g == NULL) {
+            errmsg("Can't open result.txt file\n");
+        }
+
+        while (fscanf(res_fd_g, "%s", tmp_line) != EOF) {
+            printf("%s\n", tmp_line);
+            char *slash_ptr = strchr(tmp_line, '/');
+            if (slash_ptr) {
+                in_subnet_count++;
+                uint32_t tmp_prefix = 0;
+                sscanf(slash_ptr + 1, "%u", &tmp_prefix);
+                *slash_ptr = 0;
+                if (strlen(tmp_line) < INET_ADDRSTRLEN) {
+                    uint32_t ip = ntohl(inet_addr(tmp_line));
+                    save_cidr(THREAD_COUNT, ip, tmp_prefix);
+                }
+                *slash_ptr = '/';
+            } else {
+                errmsg("Every subnets line \"x.x.x.x/xx\"\n");
+            }
+        }
+
+        fclose(res_fd_g);
+
+        printf("Result subnets count %d\n", in_subnet_count);
+
+        FILE *final_fd_g;
+        final_fd_g = fopen("final.txt", "w");
+        if (final_fd_g == NULL) {
+            errmsg("Can't open final.txt file\n");
+        }
+
+        dump_output(THREAD_COUNT, final_fd_g);
+
+        fclose(final_fd_g);
+    }
+    //Final result
 
     return EXIT_SUCCESS;
 }

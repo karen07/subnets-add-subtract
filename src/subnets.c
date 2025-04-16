@@ -135,7 +135,7 @@ void *process_thread_func(void *arg)
 
     root_g[thread_id] = &none_g[thread_id];
 
-    int32_t res_count = 0;
+    uint32_t res_count = 0;
 
     printf("Start %d %lu-%lu\n", thread_id, ((1UL << 32) / THREAD_COUNT) * thread_id,
            ((1UL << 32) / THREAD_COUNT) * (thread_id + 1));
@@ -158,7 +158,7 @@ void *process_thread_func(void *arg)
 
     pthread_barrier_wait(&threads_barrier_end);
 
-    printf("End %d %d\n", thread_id, res_count);
+    printf("End %d %u\n", thread_id, res_count);
     fflush(stdout);
 
     return NULL;
@@ -338,6 +338,8 @@ int32_t main(int32_t argc, char *argv[])
 
     pthread_barrier_wait(&threads_barrier_start);
     pthread_barrier_wait(&threads_barrier_end);
+
+    fflush(stdout);
 
     //Dump result
     {

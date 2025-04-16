@@ -402,7 +402,6 @@ int32_t main(int32_t argc, char *argv[])
         }
 
         while (fscanf(res_fd_g, "%s", tmp_line) != EOF) {
-            printf("%s\n", tmp_line);
             char *slash_ptr = strchr(tmp_line, '/');
             if (slash_ptr) {
                 in_subnet_count++;

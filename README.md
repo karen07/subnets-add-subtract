@@ -4,6 +4,7 @@ Adding and subtracting subnets. The result is in the file result.txt.
 ```sh
 Commands:
   Required parameters:
-    +  "/test.txt"  Path to the subnets to add
-    -  "/test.txt"  Path to the subnets to subtract
+    -t  "x"          Thread count
+    -a  "/test.txt"  Path to the subnets to add
+    -s  "/test.txt"  Path to the subnets to subtract
 ```

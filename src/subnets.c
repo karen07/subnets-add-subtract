@@ -145,31 +145,28 @@ void *process_thread_func(void *arg)
 
     root_g[thread_id] = &none_g[thread_id];
 
-    uint32_t res_count = 0;
-
-    printf("Start %d %lu-%lu\n", thread_id, ((1UL << 32) / thread_count) * thread_id,
-           ((1UL << 32) / thread_count) * (thread_id + 1));
-    fflush(stdout);
+    //printf("Start %2d %10lu - %10lu\n", thread_id, ((1UL << 32) / thread_count) * thread_id,
+    //       ((1UL << 32) / thread_count) * (thread_id + 1));
+    //fflush(stdout);
 
     pthread_barrier_wait(&threads_barrier_start);
 
     for (uint64_t i = ((1UL << 32) / thread_count) * thread_id;
          i < ((1UL << 32) / thread_count) * (thread_id + 1); i++) {
-        uint64_t offset_i = (i - ((1UL << 32) / thread_count) * thread_id);
-        uint64_t part = ((1UL << 32) / thread_count / 100);
-        if (offset_i % part == 0) {
-            printf("%d %lu%%\n", thread_id, offset_i / part);
-        }
+        //uint64_t offset_i = (i - ((1UL << 32) / thread_count) * thread_id);
+        //uint64_t part = ((1UL << 32) / thread_count / 100);
+        //if (offset_i % part == 0) {
+        //    printf("%d %lu%%\n", thread_id, offset_i / part);
+        //}
         if ((ips[i / CHAR_BIT] & ((char)1 << i % CHAR_BIT)) != 0) {
             save_one_addr(thread_id, i);
-            res_count++;
         }
     }
 
     pthread_barrier_wait(&threads_barrier_end);
 
-    printf("End %d %u\n", thread_id, res_count);
-    fflush(stdout);
+    //printf("End %2d\n", thread_id);
+    //fflush(stdout);
 
     return NULL;
 }
@@ -328,10 +325,10 @@ int32_t main(int32_t argc, char *argv[])
                         uint32_t mask = 0xFFFFFFFFFFFFFFFF << (32 - tmp_prefix);
                         ip &= mask;
                         for (uint64_t i = 0; i < subnet_size; i++) {
-                            if ((ips[ip / CHAR_BIT] & ((char)1 << ip % CHAR_BIT)) == 0) {
-                                printf("Incorrect intersection of subnets %s/%u\n", tmp_line,
-                                       tmp_prefix);
-                            }
+                            //if ((ips[ip / CHAR_BIT] & ((char)1 << ip % CHAR_BIT)) == 0) {
+                            //    printf("Incorrect intersection of subnets %s/%u\n", tmp_line,
+                            //           tmp_prefix);
+                            //}
                             ips[ip / CHAR_BIT] &= ~((char)1 << ip % CHAR_BIT);
                             ip++;
                         }
@@ -395,8 +392,6 @@ int32_t main(int32_t argc, char *argv[])
 
         root_g[THREAD_COUNT] = &none_g[THREAD_COUNT];
 
-        int32_t in_subnet_count = 0;
-
         FILE *res_fd_g;
         res_fd_g = fopen("result.txt", "r");
         if (res_fd_g == NULL) {
@@ -406,7 +401,6 @@ int32_t main(int32_t argc, char *argv[])
         while (fscanf(res_fd_g, "%s", tmp_line) != EOF) {
             char *slash_ptr = strchr(tmp_line, '/');
             if (slash_ptr) {
-                in_subnet_count++;
                 uint32_t tmp_prefix = 0;
                 sscanf(slash_ptr + 1, "%u", &tmp_prefix);
                 *slash_ptr = 0;
@@ -421,8 +415,6 @@ int32_t main(int32_t argc, char *argv[])
         }
 
         fclose(res_fd_g);
-
-        printf("Result subnets count %d\n", in_subnet_count);
 
         res_fd_g = fopen("result.txt", "w");
         if (res_fd_g == NULL) {

@@ -424,15 +424,14 @@ int32_t main(int32_t argc, char *argv[])
 
         printf("Result subnets count %d\n", in_subnet_count);
 
-        FILE *final_fd_g;
-        final_fd_g = fopen("final.txt", "w");
-        if (final_fd_g == NULL) {
-            errmsg("Can't open final.txt file\n");
+        res_fd_g = fopen("result.txt", "w");
+        if (res_fd_g == NULL) {
+            errmsg("Can't open result.txt file\n");
         }
 
-        dump_output(THREAD_COUNT, final_fd_g);
+        dump_output(THREAD_COUNT, res_fd_g);
 
-        fclose(final_fd_g);
+        fclose(res_fd_g);
     }
     //Final result
 

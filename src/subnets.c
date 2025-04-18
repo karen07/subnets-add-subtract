@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <limits.h>
 #include <pthread.h>
+#include <sys/time.h>
 #include <arpa/inet.h>
 #include <linux/limits.h>
 
@@ -365,8 +366,20 @@ int32_t main(int32_t argc, char *argv[])
     }
     //Calc result
 
+    struct timeval now_timeval_start;
+    struct timeval now_timeval_end;
+
     pthread_barrier_wait(&threads_barrier_start);
+    gettimeofday(&now_timeval_start, NULL);
+
     pthread_barrier_wait(&threads_barrier_end);
+    gettimeofday(&now_timeval_end, NULL);
+
+    uint64_t now_us_start;
+    uint64_t now_us_end;
+    now_us_start = now_timeval_start.tv_sec * 1000000 + now_timeval_start.tv_usec;
+    now_us_end = now_timeval_end.tv_sec * 1000000 + now_timeval_end.tv_usec;
+    printf("Time %f s\n", (now_us_end - now_us_start) / 1000000.0);
 
     fflush(stdout);
 

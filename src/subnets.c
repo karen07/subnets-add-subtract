@@ -13,6 +13,18 @@
 
 #define THREAD_COUNT 64
 
+#define IPV4_BITS 32
+#define IPV4_HIGHEST_BIT (IPV4_BITS - 1)
+#define OCTET_BITS 8
+#define SHIFT_24 24
+#define SHIFT_16 16
+#define SHIFT_8 8
+#define OCTET_MASK 0xFFu
+#define PATH_SAFETY_MARGIN 100
+#define TMP_LINE_MAXLEN 100
+#define USEC_PER_SEC 1000000ULL
+#define BIT_INDEX_NONE (-1)
+
 typedef struct node NODE;
 struct node {
     NODE *sub[2];
@@ -43,6 +55,17 @@ static int32_t thread_count = 0;
 
 static pthread_barrier_t threads_barrier_start;
 static pthread_barrier_t threads_barrier_end;
+
+static inline uint32_t prefix_to_mask(uint32_t p)
+{
+    if (p == 0U) {
+        return 0U;
+    }
+    if (p >= IPV4_BITS) {
+        return UINT32_MAX;
+    }
+    return UINT32_MAX << (IPV4_BITS - p);
+}
 
 //Add node
 static void free_tree(NODE *n, NODE *none, NODE *all)
@@ -76,7 +99,7 @@ static void add_to_node(NODE **np, NODE *none, NODE *all, unsigned long int a, i
         n->sub[1] = none;
         *np = n;
     }
-    add_to_node(&n->sub[(a >> bit) & 1], none, all, a, bit - 1, end);
+    add_to_node(&n->sub[(a >> bit) & 1U], none, all, a, bit - 1, end);
     if ((n->sub[0] == all) && (n->sub[1] == all)) {
         free(n);
         *np = all;
@@ -85,13 +108,19 @@ static void add_to_node(NODE **np, NODE *none, NODE *all, unsigned long int a, i
 
 static void save_one_addr(int32_t thread_id, unsigned long int add)
 {
-    add_to_node(&root_g[thread_id], &none_g[thread_id], &all_g[thread_id], add, 31, -1);
+    add_to_node(&root_g[thread_id], &none_g[thread_id], &all_g[thread_id], add, IPV4_HIGHEST_BIT,
+                BIT_INDEX_NONE);
 }
 
 static void save_cidr(int32_t thread_id, unsigned long int add, int pref)
 {
-    add_to_node(&root_g[thread_id], &none_g[thread_id], &all_g[thread_id],
-                pref ? add & 0xffffffff & (0xffffffff << (32 - pref)) : 0, 31, 31 - pref);
+    uint32_t mask = prefix_to_mask((uint32_t)pref);
+    unsigned long int base = 0UL;
+    if (pref) {
+        base = add & (unsigned long int)mask;
+    }
+    add_to_node(&root_g[thread_id], &none_g[thread_id], &all_g[thread_id], base, IPV4_HIGHEST_BIT,
+                IPV4_HIGHEST_BIT - pref);
 }
 //Add node
 
@@ -102,20 +131,22 @@ static void dump_tree(NODE *n, NODE *none, NODE *all, FILE *res_fd, unsigned lon
         return;
     }
     if (n == all) {
-        fprintf(res_fd, "%lu.%lu.%lu.%lu/%d\n", v >> 24 & 0xff, (v >> 16) & 0xff, (v >> 8) & 0xff,
-                v & 0xff, 31 - bit);
+        fprintf(res_fd, "%lu.%lu.%lu.%lu/%d\n", (v >> SHIFT_24) & OCTET_MASK,
+                (v >> SHIFT_16) & OCTET_MASK, (v >> SHIFT_8) & OCTET_MASK, v & OCTET_MASK,
+                IPV4_HIGHEST_BIT - bit);
         return;
     }
     if (bit < 0) {
         abort();
     }
     dump_tree(n->sub[0], none, all, res_fd, v, bit - 1);
-    dump_tree(n->sub[1], none, all, res_fd, v | (1 << bit), bit - 1);
+    dump_tree(n->sub[1], none, all, res_fd, v | (1U << bit), bit - 1);
 }
 
 static void dump_output(int32_t thread_id, FILE *res_fd_g)
 {
-    dump_tree(root_g[thread_id], &none_g[thread_id], &all_g[thread_id], res_fd_g, 0, 31);
+    dump_tree(root_g[thread_id], &none_g[thread_id], &all_g[thread_id], res_fd_g, 0,
+              IPV4_HIGHEST_BIT);
 }
 //Dump
 
@@ -152,14 +183,14 @@ void *process_thread_func(void *arg)
 
     pthread_barrier_wait(&threads_barrier_start);
 
-    for (uint64_t i = ((1UL << 32) / thread_count) * thread_id;
-         i < ((1UL << 32) / thread_count) * (thread_id + 1); i++) {
+    for (uint64_t i = ((1ULL << IPV4_BITS) / thread_count) * thread_id;
+         i < ((1ULL << IPV4_BITS) / thread_count) * (thread_id + 1); i++) {
         //uint64_t offset_i = (i - ((1UL << 32) / thread_count) * thread_id);
         //uint64_t part = ((1UL << 32) / thread_count / 100);
         //if (offset_i % part == 0) {
         //    printf("%d %lu%%\n", thread_id, offset_i / part);
         //}
-        if ((ips[i / CHAR_BIT] & ((char)1 << i % CHAR_BIT)) != 0) {
+        if ((ips[i / CHAR_BIT] & ((char)1 << (i % CHAR_BIT))) != 0) {
             save_one_addr(thread_id, i);
         }
     }
@@ -172,7 +203,7 @@ void *process_thread_func(void *arg)
     return NULL;
 }
 
-int32_t main(int32_t argc, char *argv[])
+int32_t main(int32_t argc, char *argv[]) // NOLINT(readability-function-cognitive-complexity)
 {
     printf("Subnets calc started\n\n");
 
@@ -201,7 +232,7 @@ int32_t main(int32_t argc, char *argv[])
             if (!strcmp(argv[i], "-a")) {
                 if (i != argc - 1) {
                     printf("  Path to the subnets to add  \"%s\"\n", argv[i + 1]);
-                    if (strlen(argv[i + 1]) < PATH_MAX - 100) {
+                    if (strlen(argv[i + 1]) < PATH_MAX - PATH_SAFETY_MARGIN) {
                         strcpy(add_subnets_path, argv[i + 1]);
                     }
                     i++;
@@ -211,7 +242,7 @@ int32_t main(int32_t argc, char *argv[])
             if (!strcmp(argv[i], "-s")) {
                 if (i != argc - 1) {
                     printf("  Path to the subnets to subtract  \"%s\"\n", argv[i + 1]);
-                    if (strlen(argv[i + 1]) < PATH_MAX - 100) {
+                    if (strlen(argv[i + 1]) < PATH_MAX - PATH_SAFETY_MARGIN) {
                         strcpy(sub_subnets_path, argv[i + 1]);
                     }
                     i++;
@@ -266,7 +297,7 @@ int32_t main(int32_t argc, char *argv[])
                 errmsg("Can't open Add subnets file %s\n", add_subnets_path);
             }
 
-            char tmp_line[100];
+            char tmp_line[TMP_LINE_MAXLEN];
 
             int32_t in_subnet_count = 0;
 
@@ -279,11 +310,11 @@ int32_t main(int32_t argc, char *argv[])
                     *slash_ptr = 0;
                     if (strlen(tmp_line) < INET_ADDRSTRLEN) {
                         uint32_t ip = ntohl(inet_addr(tmp_line));
-                        uint64_t subnet_size = 1UL << (32 - tmp_prefix);
-                        uint32_t mask = 0xFFFFFFFFFFFFFFFF << (32 - tmp_prefix);
+                        uint64_t subnet_size = 1ULL << (IPV4_BITS - tmp_prefix);
+                        uint32_t mask = prefix_to_mask(tmp_prefix);
                         ip &= mask;
                         for (uint64_t i = 0; i < subnet_size; i++) {
-                            ips[ip / CHAR_BIT] |= (char)1 << ip % CHAR_BIT;
+                            ips[ip / CHAR_BIT] |= (char)1 << (ip % CHAR_BIT);
                             ip++;
                         }
                     }
@@ -309,7 +340,7 @@ int32_t main(int32_t argc, char *argv[])
                 errmsg("Can't open Subtract subnets file %s\n", sub_subnets_path);
             }
 
-            char tmp_line[100];
+            char tmp_line[TMP_LINE_MAXLEN];
 
             int32_t in_subnet_count = 0;
 
@@ -322,15 +353,15 @@ int32_t main(int32_t argc, char *argv[])
                     *slash_ptr = 0;
                     if (strlen(tmp_line) < INET_ADDRSTRLEN) {
                         uint32_t ip = ntohl(inet_addr(tmp_line));
-                        uint64_t subnet_size = 1UL << (32 - tmp_prefix);
-                        uint32_t mask = 0xFFFFFFFFFFFFFFFF << (32 - tmp_prefix);
+                        uint64_t subnet_size = 1ULL << (IPV4_BITS - tmp_prefix);
+                        uint32_t mask = prefix_to_mask(tmp_prefix);
                         ip &= mask;
                         for (uint64_t i = 0; i < subnet_size; i++) {
                             //if ((ips[ip / CHAR_BIT] & ((char)1 << ip % CHAR_BIT)) == 0) {
                             //    printf("Incorrect intersection of subnets %s/%u\n", tmp_line,
                             //           tmp_prefix);
                             //}
-                            ips[ip / CHAR_BIT] &= ~((char)1 << ip % CHAR_BIT);
+                            ips[ip / CHAR_BIT] &= (char)~((char)1 << (ip % CHAR_BIT));
                             ip++;
                         }
                     }
@@ -377,9 +408,11 @@ int32_t main(int32_t argc, char *argv[])
 
     uint64_t now_us_start;
     uint64_t now_us_end;
-    now_us_start = now_timeval_start.tv_sec * 1000000 + now_timeval_start.tv_usec;
-    now_us_end = now_timeval_end.tv_sec * 1000000 + now_timeval_end.tv_usec;
-    printf("Time %f s\n", (now_us_end - now_us_start) / 1000000.0);
+    now_us_start =
+        (uint64_t)now_timeval_start.tv_sec * USEC_PER_SEC + (uint64_t)now_timeval_start.tv_usec;
+    now_us_end =
+        (uint64_t)now_timeval_end.tv_sec * USEC_PER_SEC + (uint64_t)now_timeval_end.tv_usec;
+    printf("Time %f s\n", (double)(now_us_end - now_us_start) / (double)USEC_PER_SEC);
 
     fflush(stdout);
 
@@ -401,7 +434,7 @@ int32_t main(int32_t argc, char *argv[])
 
     //Final result
     {
-        char tmp_line[100];
+        char tmp_line[TMP_LINE_MAXLEN];
 
         root_g[THREAD_COUNT] = &none_g[THREAD_COUNT];
 

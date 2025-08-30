@@ -3,6 +3,11 @@ project(subnets C)
 
 set(SANITIZER "off" CACHE STRING "off|address|memory|thread|undefined")
 
+set(CMAKE_C_CLANG_TIDY clang-tidy
+    "-checks=-*,readability-*,-readability-identifier-length"
+    "--warnings-as-errors=-*,readability-*,-readability-identifier-length"
+)
+
 add_compile_options(-Wall -Wextra -Werror -Wpedantic -std=gnu99)
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/include")
     include_directories(include)

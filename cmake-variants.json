@@ -8,23 +8,31 @@
 				"long": "Build with no optimizations and debugging information",
 				"buildType": "Debug",
 				"settings": {
-					"CMAKE_CXX_FLAGS_DEBUG": "-g -Og"
+					"SANITIZER": "off"
 				}
 			},
 			"Debug_ASan": {
 				"short": "Debug_ASan",
-				"long": "Build with no optimizations and debugging information and ASan",
-				"buildType": "Debug_ASan",
+				"long": "Debug + AddressSanitizer",
+				"buildType": "Debug",
 				"settings": {
-					"CMAKE_CXX_FLAGS_DEBUG": "-g -Og"
+					"SANITIZER": "address"
 				}
 			},
 			"Debug_MSan": {
 				"short": "Debug_MSan",
-				"long": "Build with no optimizations and debugging information and MSan",
-				"buildType": "Debug_MSan",
+				"long": "Debug + MemorySanitizer (clang only)",
+				"buildType": "Debug",
 				"settings": {
-					"CMAKE_CXX_FLAGS_DEBUG": "-g -Og"
+					"SANITIZER": "memory"
+				}
+			},
+			"Debug_UBSan": {
+				"short": "Debug_UBSan",
+				"long": "Debug + UndefinedBehaviorSanitizer",
+				"buildType": "Debug",
+				"settings": {
+					"SANITIZER": "undefined"
 				}
 			},
 			"Release": {
@@ -32,7 +40,7 @@
 				"long": "Build with optimizations",
 				"buildType": "Release",
 				"settings": {
-					"CMAKE_CXX_FLAGS_RELEASE": "-O2"
+					"SANITIZER": "off"
 				}
 			}
 		}

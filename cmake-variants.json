@@ -1,0 +1,48 @@
+{
+	"buildType": {
+		"default": "Release",
+		"description": "Build Type Selection",
+		"choices": {
+			"Debug": {
+				"short": "Debug",
+				"long": "Build with no optimizations and debugging information",
+				"buildType": "Debug",
+				"settings": {
+					"SANITIZER": "off"
+				}
+			},
+			"Debug_ASan": {
+				"short": "Debug_ASan",
+				"long": "Debug + AddressSanitizer",
+				"buildType": "Debug",
+				"settings": {
+					"SANITIZER": "address"
+				}
+			},
+			"Debug_MSan": {
+				"short": "Debug_MSan",
+				"long": "Debug + MemorySanitizer (clang only)",
+				"buildType": "Debug",
+				"settings": {
+					"SANITIZER": "memory"
+				}
+			},
+			"Debug_UBSan": {
+				"short": "Debug_UBSan",
+				"long": "Debug + UndefinedBehaviorSanitizer",
+				"buildType": "Debug",
+				"settings": {
+					"SANITIZER": "undefined"
+				}
+			},
+			"Release": {
+				"short": "Release",
+				"long": "Build with optimizations",
+				"buildType": "Release",
+				"settings": {
+					"SANITIZER": "off"
+				}
+			}
+		}
+	}
+}

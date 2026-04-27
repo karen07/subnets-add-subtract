@@ -1,6 +1,9 @@
 # Subnets add subtract
+
 Adding and subtracting subnets. The result is in the file result.txt.
+
 ## Usage
+
 ```sh
 Commands:
   Required parameters:

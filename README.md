@@ -1,10 +1,7 @@
 # Subnets add subtract
 
-Subnets add subtract is a C utility for combining IPv4 CIDR lists, subtracting an optional second list, and writing the remaining address space as compact CIDR output.
-
-The `-a` input provides networks to include in the working set, while `-s` provides networks to remove. The resulting IPv4 address set is compacted back into CIDR form and written to `result.txt`.
-
-The implementation partitions the IPv4 address space between worker threads and uses a prefix tree to build the compact final output. The thread count is required to be a power of two.
+A C utility for combining IPv4 CIDR lists and optionally subtracting a second list. It
+writes the resulting address space as a compact CIDR set.
 
 ## Описание
 
